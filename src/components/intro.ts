@@ -85,6 +85,7 @@ export class IntroComponent extends Container {
     this.addChild(new Text(cmd('/watch') + '<ticker>  Live price/orderbook feed', 0, 0));
     this.addChild(new Text(cmd('/backtest') + 'Model accuracy scorecard + live edge scanner', 0, 0));
     this.addChild(new Text(cmd('/buy /sell') + '<ticker> <n> [price]   /cancel <order_id>', 0, 0));
+    this.addChild(new Text(cmd('/strategy') + 'list|init <name>  Deterministic strategies (run: kalshi strategy run <name>)', 0, 0));
     this.addChild(new Text(cmd('/help') + '[command]  Show help (/help <command> for details)', 0, 0));
     this.addChild(new Text(cmd('/quit') + 'Quit CLI session', 0, 0));
     this.addChild(new Spacer(1));

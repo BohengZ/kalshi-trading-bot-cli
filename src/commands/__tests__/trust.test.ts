@@ -12,7 +12,7 @@ function makeArgs(o: Partial<ParsedArgs>): ParsedArgs {
     live: false, refresh: false, report: false, dryRun: false, verbose: false,
     performance: false, resolved: false, unresolved: false,
     behavioral: false, ranked: false, showCluster: false, activeOnly: false,
-    cells: false, autoProbs: false,
+    cells: false, autoProbs: false, once: false, allowProd: false,
     parseErrors: [],
     ...o,
   };

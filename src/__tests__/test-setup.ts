@@ -35,6 +35,8 @@ function restoreCredentials(): void {
 }
 
 if (process.env.KALSHI_BOT_LIVE_TESTS !== '1') {
+  // Fetch is mocked in unit tests; the client-side rate limiter has its own tests.
+  process.env.KALSHI_RATE_LIMIT = 'off';
   restoreCredentials();
   // env.ts runs dotenv once, on first import. Trigger that now, while every
   // key is already set, so no later import can pull real values back in.

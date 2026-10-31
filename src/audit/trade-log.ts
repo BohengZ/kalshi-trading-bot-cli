@@ -1,7 +1,8 @@
 /**
  * Daily trade log: one JSONL file per local calendar day under
  * ~/.kalshi-bot/trades/YYYY-MM-DD.jsonl, one line per order action
- * (place, batch place, amend, cancel, batch cancel) with its outcome.
+ * (place, batch place, amend, cancel, batch cancel) with its outcome, plus
+ * the strategy runner's per-cycle decisions and the fills it picks up.
  *
  * Written from the orders-v2 chokepoint so every path (CLI, TUI, agent,
  * strategy loops) is captured — including orders the mandate refused and
@@ -12,7 +13,7 @@ import { appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { appPath } from '../utils/paths.js';
 
-export type TradeAction = 'place' | 'batch_place' | 'amend' | 'cancel' | 'batch_cancel';
+export type TradeAction = 'place' | 'batch_place' | 'amend' | 'cancel' | 'batch_cancel' | 'decision' | 'fill';
 export type TradeOutcome = 'ok' | 'refused' | 'error';
 
 export interface TradeLogRecord {
@@ -27,6 +28,13 @@ export interface TradeLogRecord {
   response?: unknown;
   /** Refusal reason or exchange error on failure. */
   error?: string;
+  /** Strategy runner context, on records written by `kalshi strategy run`. */
+  strategy?: string;
+  config?: string;
+  cycle?: number;
+  mode?: 'dry-run' | 'live';
+  /** Free-form record body (decision: quotes, decisions, results; fill: the fill). */
+  detail?: unknown;
 }
 
 /** Local calendar date as YYYY-MM-DD — the trader's day, not UTC's. */

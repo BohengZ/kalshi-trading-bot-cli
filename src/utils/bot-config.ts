@@ -24,6 +24,8 @@ export interface BotConfig {
   watch: { min_interval_minutes: number; ticker_interval_seconds: number };
   gateway: { whatsapp: { enabled: boolean } };
   daemon: { interval_minutes: number };
+  /** Kalshi API usage tier (basic, advanced, expert, …) — sets the client-side rate limit. */
+  api: { rate_tier: string };
   mandate: {
     kill_switch: boolean;
     kill_reason: string;
@@ -41,6 +43,7 @@ const DEFAULTS: BotConfig = {
   watch: { min_interval_minutes: 15, ticker_interval_seconds: 5 },
   gateway: { whatsapp: { enabled: false } },
   daemon: { interval_minutes: 15 },
+  api: { rate_tier: 'basic' },
   mandate: { kill_switch: false, kill_reason: '', max_contracts_per_order: 100, max_notional_per_order: 100, max_daily_loss: 50 },
 };
 

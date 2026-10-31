@@ -43,7 +43,7 @@ bun start
 
 - **Config, cache, SQLite DB:** `~/.kalshi-bot/`
 - **API keys (`.env`):** `~/.kalshi-bot/.env` — written by the setup wizard. A `.env` in the current directory takes precedence (handy for dev).
-- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`) with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
+- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`), strategy-cycle `decision` and `fill`, with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
 - **First run** with no keys configured triggers the setup wizard automatically.
 
 ### Updating
@@ -166,6 +166,7 @@ Markets in KXBTCD-26SEP1817 — 3 shown
 | `reflect` | Reflection loop — turns each settled position into a terse lesson, re-surfaced inside `analyze` for the same series |
 | `hypothesis` | Falsifiable-claim registry — executed trades auto-file claims, settlements auto-resolve them; add thematic claims manually |
 | `variants [backtest flags]` | Strategy-variant leaderboard — one signal pipeline segmented through named filters (side, edge band, price band, confidence), ranked by ROI/maxDD |
+| `strategy list` / `strategy init <name>` / `strategy run <name>` | Deterministic strategy engine — no AI in the trading loop. Dry-run by default; `--live` sends orders. See [Strategies](#strategies) |
 | `daemon [once]` | Background maintenance loop: index refresh, Octagon prefetch, settlements sync, paper settlement, reflection — keeps caches warm off the critical path |
 | `paper buy/sell ...` / `paper` | Paper-trading ledger — forward-test with real entry quotes and real settlements, zero exchange risk; scored like the backtest |
 | `mandate` / `kill [reason]` / `resume` | Hard trading caps (per-order size/notional, daily realized loss) enforced at order placement, plus an instant halt |
@@ -208,8 +209,11 @@ kalshi hypothesis resolve 3 refuted "only one cut happened"
 | `--verbose` | Verbose output |
 | `--market <market>` | Single-market detail card instead of the event view (trust) |
 | `--min-edge <n>` | Minimum edge threshold in pp (backtest default 0.5) |
-| `--interval <min>` | Scan interval in minutes (watch) |
-| `--live` | Force 15m scan interval (watch) |
+| `--interval <min>` | Scan interval in minutes (watch); cycle interval (strategy run, default 1, min 0.5) |
+| `--live` | Force 15m scan interval (watch); send real orders (strategy run) |
+| `--once` | Run one cycle, then exit (strategy run) |
+| `--allow-prod` | Allow `--live` strategy orders on production (real money) |
+| `--strategy <name>` | Strategy for a new config (strategy init, default `threshold`) |
 | `--days <n>` | Lookback period in days (backtest, default 15) |
 | `--max-age <n>` | Reject predictions older than N days (backtest, default = `--days`) |
 | `--resolved` | Resolved markets only (backtest) |
@@ -413,6 +417,21 @@ UNRESOLVED (105 markets)
 
 Set `KALSHI_USE_DEMO=true` in your `.env` to use Kalshi's demo environment. All trades are simulated — no real money at risk.
 
+### Strategies
+
+Deterministic strategies trade from fixed rules — no LLM in the loop. A strategy is a pure function from a market snapshot to decisions, so the same inputs always give the same orders.
+
+```bash
+kalshi strategy init my-bot                  # writes ~/.kalshi-bot/strategies/my-bot.json
+kalshi strategy run my-bot --once            # one dry-run cycle: decisions logged, nothing sent
+kalshi strategy run my-bot --interval 1      # dry-run loop, every minute (Ctrl-C to stop)
+kalshi strategy run my-bot --live            # send orders (demo); production also needs --allow-prod
+```
+
+The bundled `threshold` strategy is a template: buy one side at or below `entryMaxCents`, sell at `takeProfitCents` or `stopLossCents`, skip wide spreads and markets near close. Add your own in `src/strategy/` and register it in `src/strategy/registry.ts`.
+
+Each cycle makes about five reads (quotes, positions, resting orders, balance, new fills) plus one write per order, all through the client rate limiter (`api.rate_tier`). Orders go through the mandate and kill switch, at most `maxOrdersPerCycle` per cycle. The daily trade log gets a `decision` line per cycle (quotes, positions, every decision with its reason, what was sent), the `place`/`cancel` lines for each order, and a `fill` line for each new fill.
+
 ## Scripting & Parallel Use
 
 The `bunx kalshi-trading-bot-cli@latest …` form is great for one-off interactive use, but it has two gotchas when you script against it:
@@ -579,6 +598,7 @@ kalshi config risk.kelly_multiplier 0.3    # Set a value
 | `risk.daily_loss_limit` | `200` | Daily loss limit in dollars |
 | `octagon.daily_credit_ceiling` | `100` | Max Octagon credits per day |
 | `alerts.min_edge` | `0.05` | Minimum edge to trigger an alert |
+| `api.rate_tier` | `basic` | Your Kalshi API tier (`basic`, `advanced`, `expert`, …). The client throttles every call to half that tier's read/write budget |
 
 ## Architecture
 

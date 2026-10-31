@@ -79,7 +79,7 @@ export async function fetchLiveBankroll(): Promise<LiveBankroll> {
 }
 
 /** Parse a dollar-string or integer-cent price field to a decimal (0-1). */
-function parsePriceField(dollarStr: string | undefined, legacyDollarStr: string | undefined, centVal: number | undefined): number {
+export function parsePriceField(dollarStr: string | undefined, legacyDollarStr: string | undefined, centVal: number | undefined): number {
   const d = dollarStr != null ? parseFloat(dollarStr) : legacyDollarStr != null ? parseFloat(legacyDollarStr) : NaN;
   if (Number.isFinite(d)) return d;
   if (centVal != null && Number.isFinite(centVal)) return centVal / 100;

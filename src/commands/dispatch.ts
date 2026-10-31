@@ -634,6 +634,13 @@ export async function dispatch(args: ParsedArgs): Promise<void> {
       return;
     }
 
+    // ─── strategy (deterministic strategy engine, CLI only) ───────────
+    if (resolved.canonical === 'strategy') {
+      const { handleStrategy } = await import('./strategy.js');
+      process.exit(await handleStrategy(args));
+      return;
+    }
+
     // ─── daemon (background prefetch/settle maintenance loop) ─────────
     if (resolved.canonical === 'daemon') {
       const { runDaemonCycle, formatCycleSummary } = await import('../daemon/loop.js');

@@ -31,6 +31,8 @@ const SUBCOMMANDS = [
   'daemon',
   // Strategy-variant leaderboard
   'variants',
+  // Deterministic strategy engine
+  'strategy',
 ] as const;
 
 export type Subcommand = (typeof SUBCOMMANDS)[number];
@@ -98,6 +100,12 @@ export interface ParsedArgs {
   daysToClose?: number;    // ergonomic shortcut: close_before = now + N days
   /** --market <ticker>: drill into a specific market within an event (trust). */
   market?: string;
+  /** strategy run: one cycle, then exit. */
+  once: boolean;
+  /** strategy run --live: allow real-money orders on production. */
+  allowProd: boolean;
+  /** strategy init --strategy <name>: which strategy the new config uses. */
+  strategyName?: string;
   parseErrors: string[];
 }
 
@@ -160,6 +168,9 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
   let autoProbs = false;
   let daysToClose: number | undefined;
   let market: string | undefined;
+  let once = false;
+  let allowProd = false;
+  let strategyName: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -457,6 +468,13 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
         if (Number.isFinite(numeric) && Number.isInteger(numeric) && numeric > 0) { daysToClose = numeric; }
         else { parseErrors.push(`Invalid ${arg} value: "${raw}" (expected a positive integer)`); }
       } else { parseErrors.push(`${arg} requires a value`); }
+    } else if (arg === '--once') {
+      once = true;
+    } else if (arg === '--allow-prod') {
+      allowProd = true;
+    } else if (arg === '--strategy') {
+      const val = argv[++i];
+      if (val != null) { strategyName = val; } else { parseErrors.push('--strategy requires a value (e.g., --strategy threshold)'); }
     } else if (arg.startsWith('--')) {
       parseErrors.push(`Unknown flag: ${arg}`);
     } else {
@@ -487,6 +505,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): ParsedArgs {
     weights, bankroll, kellyMultiplier, n, maxPerCluster, maxCorrelation, minReturn, seriesTicker,
     sortBy, probabilities, tickers, query, showCluster, aggregateBy, activeOnly,
     seriesPrefix, sides, cells, autoProbs, daysToClose, market,
+    once, allowProd, strategyName,
     parseErrors,
   };
 }

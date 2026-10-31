@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { auditTrail } from '../../audit/index.js';
 import { fetchWithDeadline } from '../../utils/http.js';
 import { dlqWriter } from './dlq.js';
+import { throttle } from './rate-limit.js';
 import type { KalshiMarket } from './types.js';
 
 const PROD_BASE_URL = 'https://external-api.kalshi.com/trade-api/v2';
@@ -211,6 +212,9 @@ export async function callKalshiApi(
       if (options?.body && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
         fetchOptions.body = JSON.stringify(options.body);
       }
+
+      const batchItems = Array.isArray(options?.body?.orders) ? (options.body.orders as unknown[]).length : 1;
+      await throttle(method, batchItems);
 
       // Deadline is required: without one a half-open connection hangs forever
       // and the retry ladder above never sees a rejection.

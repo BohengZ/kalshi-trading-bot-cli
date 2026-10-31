@@ -20,7 +20,7 @@ function defaultArgs(overrides: Partial<ParsedArgs>): ParsedArgs {
     verbose: false, performance: false, resolved: false,
     unresolved: false,
     behavioral: false, ranked: false, showCluster: false,
-    activeOnly: false, cells: false, autoProbs: false,
+    activeOnly: false, cells: false, autoProbs: false, once: false, allowProd: false,
     parseErrors: [],
     ...overrides,
   };
@@ -301,6 +301,25 @@ export async function executeSlashCommand(command: string | undefined, args: str
           return formatPaperHuman(listPaperPositions(db), paperSummary(db), settled);
         },
       };
+    }
+
+    // ─── /strategy (deterministic strategy engine) ──────────────────
+    case 'strategy': {
+      const { formatStrategyList, initStrategyConfig, STRATEGY_USAGE } = await import('./strategy.js');
+      const sub = args[0]?.toLowerCase();
+      if (!sub || sub === 'list') return { output: formatStrategyList() };
+      if (sub === 'init') {
+        const flag = args.indexOf('--strategy');
+        try {
+          return { output: initStrategyConfig(args[1], flag >= 0 ? args[flag + 1] : undefined) };
+        } catch (err) {
+          return { output: err instanceof Error ? err.message : String(err) };
+        }
+      }
+      if (sub === 'run') {
+        return { output: `Strategies run as a foreground loop in a terminal (CLI only):\n  kalshi strategy run ${args[1] ?? '<name>'} [--interval <min>] [--once] [--live]` };
+      }
+      return { output: STRATEGY_USAGE };
     }
 
     // ─── /mandate /kill /resume (hard caps + instant halt) ──────────

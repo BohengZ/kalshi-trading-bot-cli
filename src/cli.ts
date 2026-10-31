@@ -440,6 +440,7 @@ export async function runCli(options?: { forceSetup?: boolean }) {
     { name: 'trust', description: 'Octagon Trust Index for an event', getArgumentCompletions: usageHint('<event_ticker> [--market <market_ticker>] [--verbose]', 'e.g. KXMENWORLDCUP-26 --market KXMENWORLDCUP-26-FR') },
     { name: 'variants', description: 'Strategy-variant leaderboard: backtest signals segmented by named filters', getArgumentCompletions: usageHint('[--days N] [--min-edge N] [--min-volume N] [--resolved]', 'e.g. /variants --days 7 --resolved') },
     { name: 'paper', description: 'Paper-trading ledger: forward-test without exchange orders', getArgumentCompletions: usageHint('buy|sell <ticker> <count> [price] [yes|no] — or bare for the ledger view', 'e.g. /paper buy KXFED-26SEP-T3 10 40 yes') },
+    { name: 'strategy', description: 'Deterministic strategies: list configs, init one (run is CLI only)', getArgumentCompletions: usageHint('list | init <name> [--strategy threshold] | run <name>', 'e.g. /strategy init my-bot') },
     { name: 'mandate', description: 'Show hard trading caps + kill-switch status' },
     { name: 'kill', description: 'INSTANT HALT: refuse all new orders until /resume', getArgumentCompletions: usageHint('[reason]', 'e.g. /kill reviewing model regression') },
     { name: 'resume', description: 'Lift the kill switch (mandate caps still apply)' },

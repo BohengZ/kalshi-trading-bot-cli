@@ -272,6 +272,21 @@ definitions — hit rate, capital-weighted ROI, alpha vs always-NO, max
 drawdown, ROI/maxDD — ranked risk-adjusted. Operationalizes the manual
 "how does the strategy do if I only take X" segmentation.`,
 
+    strategy: `**${p}strategy** — Deterministic strategy engine (no AI in the trading loop)
+
+kalshi strategy list                         Strategies and your configs
+kalshi strategy init <name> [--strategy threshold]   Write an example config to edit
+kalshi strategy run <name> --once            One dry-run cycle (no orders sent)
+kalshi strategy run <name> [--interval <min>]        Dry-run loop (default every 1m, min 0.5m)
+kalshi strategy run <name> --live            Send orders (demo; prod also needs --allow-prod)
+
+Configs live in ~/.kalshi-bot/strategies/<name>.json. Each cycle fetches
+quotes, positions, resting orders, balance and new fills (about 5 rate-limited
+API calls), runs the strategy as a pure function, and sends at most
+maxOrdersPerCycle orders through the mandate and kill switch. Every cycle's
+decisions, every order and every fill are appended to
+~/.kalshi-bot/trades/YYYY-MM-DD.jsonl. The run loop is CLI only.`,
+
     daemon: `**${p}daemon** — Background maintenance loop (CLI only)
 
 kalshi daemon                    Run forever; cycle every daemon.interval_minutes (default 15m)
@@ -620,6 +635,7 @@ Analysis & Trading:
   hypothesis                    Falsifiable-claim registry (auto-filed by trades)
   paper                         Forward-test ledger (no exchange orders)
   variants                      Strategy-variant leaderboard (segmented backtest)
+  strategy list|init|run        Deterministic strategy engine (dry-run unless --live)
   daemon [once]                 Background maintenance loop (keeps caches warm)
   mandate · kill · resume       Hard caps + instant trading halt
   analyze <ticker>              Full report: edge, drivers, Kelly sizing
