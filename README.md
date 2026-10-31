@@ -14,7 +14,7 @@ Integrates with the [Octagon Research API](https://app.octagonai.co) for AI-gene
   ```bash
   curl -fsSL https://bun.com/install | bash
   ```
-- A **Kalshi** account with API access (API key + RSA private key)
+- A **Kalshi** account with API access (API key ID + Ed25519 or RSA private key)
 - One **LLM provider key** (OpenAI / Anthropic / Google / xAI / OpenRouter / Ollama). The setup wizard collects these on first run.
 - Optional: an **[Octagon](https://app.octagonai.co)** key for AI edge analysis, and a **Tavily** key for web research.
 
@@ -537,7 +537,7 @@ cp env.example ~/.kalshi-bot/.env
 | Variable | Description |
 |----------|-------------|
 | `KALSHI_API_KEY` | Kalshi API key ID |
-| `KALSHI_PRIVATE_KEY_FILE` | Path to your Kalshi RSA private key PEM file |
+| `KALSHI_PRIVATE_KEY_FILE` | Path to your Kalshi private key PEM file (Ed25519 or RSA) |
 | `OPENAI_API_KEY` | OpenAI API key (default model is GPT-5.4) |
 | `OCTAGON_API_KEY` | Octagon API key. Powers deep research (`analyze`), edge scanning (`search edge`), and the Octagon-backed discovery + basket commands (`search`, `similar`, `clusters`, `peers`, `correlate`, `basket`). Get one at [app.octagonai.co](https://app.octagonai.co) |
 

@@ -68,7 +68,7 @@ Registered in `src/tools/registry.ts`, gated on available env vars:
 ## Environment Variables
 
 - Kalshi: `KALSHI_API_KEY`, and `KALSHI_PRIVATE_KEY` or
-  `KALSHI_PRIVATE_KEY_FILE` (RSA-PSS request signing). `KALSHI_USE_DEMO=true`
+  `KALSHI_PRIVATE_KEY_FILE` (Ed25519 or RSA-PSS request signing). `KALSHI_USE_DEMO=true`
   targets the demo exchange.
 - Octagon: `OCTAGON_API_KEY`, `OCTAGON_BASE_URL`, `OCTAGON_CONCURRENCY`.
 - LLM: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OLLAMA_BASE_URL`,

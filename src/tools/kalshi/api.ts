@@ -1,4 +1,4 @@
-import { createSign, constants } from 'node:crypto';
+import { createPrivateKey, createSign, constants, sign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { logger } from '../../utils/logger.js';
 import { auditTrail } from '../../audit/index.js';
@@ -6,8 +6,8 @@ import { fetchWithDeadline } from '../../utils/http.js';
 import { dlqWriter } from './dlq.js';
 import type { KalshiMarket } from './types.js';
 
-const PROD_BASE_URL = 'https://api.elections.kalshi.com/trade-api/v2';
-const DEMO_BASE_URL = 'https://demo-api.kalshi.co/trade-api/v2';
+const PROD_BASE_URL = 'https://external-api.kalshi.com/trade-api/v2';
+const DEMO_BASE_URL = 'https://external-api.demo.kalshi.co/trade-api/v2';
 
 function getBaseUrl(): string {
   return process.env.KALSHI_USE_DEMO === 'true' ? DEMO_BASE_URL : PROD_BASE_URL;
@@ -29,25 +29,35 @@ function getApiKey(): string {
   return key;
 }
 
-function buildSignature(method: string, path: string): { timestamp: string; signature: string } {
-  const timestamp = Date.now().toString();
-  const message = timestamp + method.toUpperCase() + path;
+/**
+ * Sign `message` with the configured key. Kalshi verifies with the algorithm
+ * of the registered public key, so the scheme follows the parsed key type
+ * (the PEM header doesn't say): Ed25519 signs the message directly, RSA uses
+ * PSS with SHA-256 and a digest-length salt.
+ */
+export function signMessage(message: string, pem: string): string {
+  const key = createPrivateKey(pem);
+  if (key.asymmetricKeyType === 'ed25519') {
+    return sign(null, Buffer.from(message, 'utf8'), key).toString('base64');
+  }
 
-  const privateKey = getPrivateKey();
-  const sign = createSign('SHA256');
-  sign.update(message);
-  sign.end();
-
-  const signature = sign.sign(
+  const signer = createSign('SHA256');
+  signer.update(message);
+  signer.end();
+  return signer.sign(
     {
-      key: privateKey,
+      key,
       padding: constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: 32,
+      saltLength: constants.RSA_PSS_SALTLEN_DIGEST,
     },
     'base64'
   );
+}
 
-  return { timestamp, signature };
+function buildSignature(method: string, path: string): { timestamp: string; signature: string } {
+  const timestamp = Date.now().toString();
+  const message = timestamp + method.toUpperCase() + path;
+  return { timestamp, signature: signMessage(message, getPrivateKey()) };
 }
 
 // --- Error class ---

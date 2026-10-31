@@ -12,7 +12,7 @@ AI-powered prediction market terminal for [Kalshi](https://kalshi.com). Ask natu
   ```bash
   curl -fsSL https://bun.com/install | bash
   ```
-- A **Kalshi** account with API access (API key + RSA private key)
+- A **Kalshi** account with API access (API key ID + Ed25519 or RSA private key)
 - At least one **LLM API key** (OpenAI, Anthropic, Google, xAI, OpenRouter, or a local Ollama)
 - Optional: **[Octagon](https://app.octagonai.co)** key for AI edge analysis, **Tavily** key for web research
 
@@ -49,8 +49,8 @@ bun start        # or `bun run dev` for hot-reload
 | Variable | Required | Description |
 |---|---|---|
 | `KALSHI_API_KEY` | Yes | Your Kalshi API key |
-| `KALSHI_PRIVATE_KEY_FILE` | Yes* | Path to RSA private key PEM file |
-| `KALSHI_PRIVATE_KEY` | Yes* | Inline RSA private key (alternative to file) |
+| `KALSHI_PRIVATE_KEY_FILE` | Yes* | Path to private key PEM file (Ed25519 or RSA) |
+| `KALSHI_PRIVATE_KEY` | Yes* | Inline private key (alternative to file) |
 | `KALSHI_USE_DEMO` | No | Set `true` for demo/paper trading (no real money) |
 | `OPENAI_API_KEY` | One of these | OpenAI API key |
 | `ANTHROPIC_API_KEY` | One of these | Anthropic API key |

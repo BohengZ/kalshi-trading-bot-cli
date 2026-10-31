@@ -380,7 +380,7 @@ export class SetupWizardController {
       const pemHeaderRe = /^(-----BEGIN [A-Z ]+-----)(.*?)(-----END [A-Z ]+-----)$/;
       const match = pem.match(pemHeaderRe);
       if (!match) {
-        this.stepError = 'Invalid private key. Expected PEM format starting with -----BEGIN RSA PRIVATE KEY-----';
+        this.stepError = 'Invalid private key. Expected PEM format starting with -----BEGIN PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----';
         this.onChange();
         return;
       }
@@ -407,7 +407,7 @@ export class SetupWizardController {
 
     // Only set KALSHI_USE_DEMO default if not already configured
     if (!process.env.KALSHI_USE_DEMO) {
-      this.stageEnv('KALSHI_USE_DEMO', 'false');
+      this.stageEnv('KALSHI_USE_DEMO', 'true');
     }
     this.transition('octagon_api_key');
   }
