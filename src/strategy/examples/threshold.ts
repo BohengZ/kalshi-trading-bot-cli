@@ -152,5 +152,6 @@ export const threshold: Strategy<ThresholdParams> = {
     maxSpreadCents: 5,
     minMinutesToClose: 60,
     maxOrdersPerCycle: 5,
+    paperCashCents: 10_000,
   }),
 };

@@ -2,6 +2,9 @@
  * Strategy runner: one cycle = snapshot → decide → reconcile → execute →
  * collect fills → log.
  *
+ * Modes: dry-run decides only; paper reads live quotes but fills orders
+ * against a simulated book (no account reads, no orders); live sends orders.
+ *
  * Each cycle costs a fixed handful of reads (markets in chunks, positions,
  * resting orders, balance, fills) plus one write per order, and every call
  * goes through callKalshiApi's rate limiter. Orders go through placeOrderV2 /
@@ -9,7 +12,7 @@
  * strategy orders exactly as to manual ones.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { callKalshiApi, type KalshiApiResponse } from '../tools/kalshi/api.js';
 import { buildV2Order, cancelOrderV2, placeOrderV2, type V2OrderBody } from '../tools/kalshi/orders-v2.js';
@@ -20,12 +23,14 @@ import { appPath } from '../utils/paths.js';
 import type { KalshiMarket, KalshiOrder, KalshiPosition } from '../tools/kalshi/types.js';
 import type { Decision, MarketQuote, RestingOrder, Snapshot, Strategy } from './types.js';
 import { getStrategy } from './registry.js';
+import { bookPositions, newBook, settle, simulate, summarize, type PaperBook, type PaperFill, type PaperSummary } from './paper.js';
 
 const MARKET_CHUNK = 50;
 const DEFAULT_MAX_ORDERS_PER_CYCLE = 5;
+const DEFAULT_PAPER_CASH_CENTS = 10_000;
 const SEEN_FILL_IDS_KEPT = 500;
 
-export type Mode = 'dry-run' | 'live';
+export type Mode = 'dry-run' | 'paper' | 'live';
 
 type ApiFn = (
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -58,6 +63,8 @@ export interface LoadedConfig {
   strategy: Strategy<any>;
   params: unknown;
   maxOrdersPerCycle: number;
+  /** Starting cash for paper mode, in cents. */
+  paperCashCents: number;
 }
 
 export function configPath(dir: string, name: string): string {
@@ -77,8 +84,10 @@ export function loadConfig(dir: string, name: string): LoadedConfig {
   const strategy = getStrategy(String(raw.strategy ?? ''));
   const max = raw.maxOrdersPerCycle ?? DEFAULT_MAX_ORDERS_PER_CYCLE;
   if (typeof max !== 'number' || !Number.isInteger(max) || max < 0) throw new Error('maxOrdersPerCycle must be a whole number >= 0');
+  const cash = raw.paperCashCents ?? DEFAULT_PAPER_CASH_CENTS;
+  if (typeof cash !== 'number' || !Number.isInteger(cash) || cash <= 0) throw new Error('paperCashCents must be a whole number of cents > 0');
   try {
-    return { name, strategy, params: strategy.validate(raw), maxOrdersPerCycle: max };
+    return { name, strategy, params: strategy.validate(raw), maxOrdersPerCycle: max, paperCashCents: cash };
   } catch (err) {
     throw new Error(`${path}: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -105,6 +114,8 @@ interface RunnerState {
   /** Unix seconds: fetch fills from here on. */
   fillsMinTs: number;
   seenFillIds: string[];
+  /** Simulated book for paper mode; created on the first paper cycle. */
+  paper?: PaperBook;
 }
 
 function statePath(dir: string, name: string): string {
@@ -119,6 +130,14 @@ function loadState(dir: string, name: string, now: Date): RunnerState {
     // first run, or unreadable — start fresh from now
   }
   return { cycle: 0, fillsMinTs: Math.floor(now.getTime() / 1000), seenFillIds: [] };
+}
+
+/** Forget a config's cycle counter, fills cursor and paper book. */
+export function resetState(dir: string, name: string): boolean {
+  const path = statePath(dir, name);
+  if (!existsSync(path)) return false;
+  rmSync(path);
+  return true;
 }
 
 function saveState(dir: string, name: string, state: RunnerState): void {
@@ -152,6 +171,7 @@ export function quoteFromMarket(m: KalshiMarket): MarketQuote {
     last: clean(toCents(parsePriceField(m.last_price_dollars, m.dollar_last_price, m.last_price))),
     volume24h: getVolume24h(m),
     closeTime: m.close_time,
+    result: m.result ?? '',
   };
 }
 
@@ -169,13 +189,18 @@ function restingFromOrder(o: KalshiOrder): RestingOrder {
   };
 }
 
-async function takeSnapshot(api: ApiFn, tickers: string[], now: Date): Promise<Snapshot> {
+async function fetchQuotes(api: ApiFn, tickers: string[]): Promise<Record<string, MarketQuote>> {
   const markets: Record<string, MarketQuote> = {};
   for (let i = 0; i < tickers.length; i += MARKET_CHUNK) {
     const chunk = tickers.slice(i, i + MARKET_CHUNK);
     const data = await api('GET', '/markets', { params: { tickers: chunk.join(','), limit: chunk.length } });
     for (const m of (data.markets ?? []) as KalshiMarket[]) markets[m.ticker] = quoteFromMarket(m);
   }
+  return markets;
+}
+
+async function takeSnapshot(api: ApiFn, tickers: string[], now: Date): Promise<Snapshot> {
+  const markets = await fetchQuotes(api, tickers);
 
   const posData = await api('GET', '/portfolio/positions', { params: { limit: 1000 } });
   const positions: Record<string, number> = {};
@@ -205,7 +230,7 @@ export function clientOrderId(config: string, cycle: number, d: Extract<Decision
 
 export interface SentResult {
   decision: Decision;
-  status: 'sent' | 'dry-run' | 'skipped' | 'refused' | 'error';
+  status: 'sent' | 'dry-run' | 'paper-filled' | 'paper-unfilled' | 'skipped' | 'refused' | 'error';
   note?: string;
   orderId?: string;
 }
@@ -218,6 +243,8 @@ export interface CycleResult {
   decisions: Decision[];
   results: SentResult[];
   newFills: number;
+  /** Paper mode: the simulated book after this cycle. */
+  paper?: PaperSummary;
   error?: string;
 }
 
@@ -236,9 +263,20 @@ export async function runCycle(cfg: LoadedConfig, opts: CycleOptions, deps: Runn
   state.cycle += 1;
   const result: CycleResult = { cycle: state.cycle, mode: opts.mode, env, apiCalls: 0, decisions: [], results: [], newFills: 0 };
   let snapshot: Snapshot | undefined;
+  const paper = opts.mode === 'paper';
+  const book = paper ? (state.paper ??= newBook(cfg.paperCashCents)) : undefined;
+  const logPaperFill = (fill: PaperFill) =>
+    deps.log.record({ action: 'paper_fill', outcome: 'ok', strategy: cfg.strategy.name, config: cfg.name, cycle: state.cycle, mode: opts.mode, detail: fill }, now);
 
   try {
-    snapshot = await takeSnapshot(api, cfg.strategy.universe(cfg.params), now);
+    if (book) {
+      // Paper: quotes are the only exchange data; account state is the simulated book.
+      const markets = await fetchQuotes(api, cfg.strategy.universe(cfg.params));
+      for (const fill of settle(book, markets)) { result.newFills++; logPaperFill(fill); }
+      snapshot = { now, markets, positions: bookPositions(book), restingOrders: [], cashCents: book.cashCents };
+    } else {
+      snapshot = await takeSnapshot(api, cfg.strategy.universe(cfg.params), now);
+    }
     result.decisions = cfg.strategy.decide(snapshot, cfg.params);
 
     let placed = 0;
@@ -255,6 +293,15 @@ export async function runCycle(cfg: LoadedConfig, opts: CycleOptions, deps: Runn
         placed++;
       }
       if (opts.mode === 'dry-run') { result.results.push({ decision: d, status: 'dry-run' }); continue; }
+      if (book) {
+        if (d.kind === 'cancel') { result.results.push({ decision: d, status: 'skipped', note: 'paper orders never rest' }); continue; }
+        const outcome = simulate(book, d, snapshot.markets[d.ticker]);
+        if (outcome.filled) { result.newFills++; logPaperFill(outcome.fill); }
+        result.results.push(outcome.filled
+          ? { decision: d, status: 'paper-filled', note: `${outcome.fill.count} @ ${outcome.fill.priceCents}¢, fee ${outcome.fill.feeCents}¢` }
+          : { decision: d, status: 'paper-unfilled', note: outcome.note });
+        continue;
+      }
       try {
         apiCalls++;
         if (d.kind === 'place') {
@@ -274,6 +321,16 @@ export async function runCycle(cfg: LoadedConfig, opts: CycleOptions, deps: Runn
       }
     }
 
+    if (book) {
+      result.paper = summarize(book, snapshot.markets);
+    } else {
+      await collectFills();
+    }
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
+  }
+
+  async function collectFills(): Promise<void> {
     // Fills since the cursor: new trades from this or earlier cycles, or placed elsewhere.
     const fillData = await api('GET', '/portfolio/fills', { params: { min_ts: state.fillsMinTs, limit: 200 } });
     const seen = new Set(state.seenFillIds);
@@ -291,8 +348,6 @@ export async function runCycle(cfg: LoadedConfig, opts: CycleOptions, deps: Runn
     // Same-second fills can straddle a poll, so keep min_ts at the last second seen and dedupe by id.
     state.fillsMinTs = maxTs;
     state.seenFillIds = state.seenFillIds.slice(-SEEN_FILL_IDS_KEPT);
-  } catch (err) {
-    result.error = err instanceof Error ? err.message : String(err);
   }
 
   result.apiCalls = apiCalls;
@@ -313,6 +368,7 @@ export async function runCycle(cfg: LoadedConfig, opts: CycleOptions, deps: Runn
       decisions: result.decisions,
       results: result.results.map((r) => ({ ticker: r.decision.ticker, kind: r.decision.kind, status: r.status, note: r.note, order_id: r.orderId })),
       new_fills: result.newFills,
+      ...(result.paper ? { paper: result.paper } : {}),
       api_calls: apiCalls,
     },
   }, now);

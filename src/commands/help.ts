@@ -276,15 +276,19 @@ drawdown, ROI/maxDD — ranked risk-adjusted. Operationalizes the manual
 
 kalshi strategy list                         Strategies and your configs
 kalshi strategy init <name> [--strategy threshold]   Write an example config to edit
-kalshi strategy run <name> --once            One dry-run cycle (no orders sent)
-kalshi strategy run <name> [--interval <min>]        Dry-run loop (default every 1m, min 0.5m)
+kalshi strategy run <name> --once            One paper cycle: live quotes, simulated fills, no orders
+kalshi strategy run <name> [--interval <min>]        Paper loop (default every 1m, min 0.5m)
+kalshi strategy run <name> --dry-run         Decide only — no fills, simulated or real
 kalshi strategy run <name> --live            Send orders (demo; prod also needs --allow-prod)
+kalshi strategy reset <name>                 Start the paper book over
 
-Configs live in ~/.kalshi-bot/strategies/<name>.json. Each cycle fetches
-quotes, positions, resting orders, balance and new fills (about 5 rate-limited
-API calls), runs the strategy as a pure function, and sends at most
-maxOrdersPerCycle orders through the mandate and kill switch. Every cycle's
-decisions, every order and every fill are appended to
+Configs live in ~/.kalshi-bot/strategies/<name>.json. Paper mode reads only
+market quotes (1 call per 50 markets) and fills against a simulated book that
+starts at paperCashCents: buys fill at the ask, sells at the bid, full size,
+Kalshi taker fee charged, settled markets pay 100¢ or 0¢. Each cycle prints
+equity and return. Live mode also reads positions, resting orders, balance and
+fills, and sends at most maxOrdersPerCycle orders through the mandate and kill
+switch. Every decision and fill (real or paper) is appended to
 ~/.kalshi-bot/trades/YYYY-MM-DD.jsonl. The run loop is CLI only.`,
 
     daemon: `**${p}daemon** — Background maintenance loop (CLI only)
@@ -635,7 +639,7 @@ Analysis & Trading:
   hypothesis                    Falsifiable-claim registry (auto-filed by trades)
   paper                         Forward-test ledger (no exchange orders)
   variants                      Strategy-variant leaderboard (segmented backtest)
-  strategy list|init|run        Deterministic strategy engine (dry-run unless --live)
+  strategy list|init|run|reset  Deterministic strategy engine (paper unless --live)
   daemon [once]                 Background maintenance loop (keeps caches warm)
   mandate · kill · resume       Hard caps + instant trading halt
   analyze <ticker>              Full report: edge, drivers, Kelly sizing

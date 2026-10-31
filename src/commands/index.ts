@@ -316,8 +316,13 @@ export async function executeSlashCommand(command: string | undefined, args: str
           return { output: err instanceof Error ? err.message : String(err) };
         }
       }
+      if (sub === 'reset' && args[1]) {
+        const { resetState } = await import('../strategy/runner.js');
+        const { appPath } = await import('../utils/paths.js');
+        return { output: resetState(appPath('strategies'), args[1]) ? `Reset ${args[1]}: paper book, cycle counter and fills cursor cleared.` : `Nothing to reset for ${args[1]}.` };
+      }
       if (sub === 'run') {
-        return { output: `Strategies run as a foreground loop in a terminal (CLI only):\n  kalshi strategy run ${args[1] ?? '<name>'} [--interval <min>] [--once] [--live]` };
+        return { output: `Strategies run as a foreground loop in a terminal (CLI only):\n  kalshi strategy run ${args[1] ?? '<name>'} [--interval <min>] [--once] [--dry-run | --live]` };
       }
       return { output: STRATEGY_USAGE };
     }

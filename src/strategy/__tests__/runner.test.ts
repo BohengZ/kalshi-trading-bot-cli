@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { assertModeAllowed, clientOrderId, loadConfig, quoteFromMarket, runCycle, type RunnerDeps } from '../runner.js';
+import { assertModeAllowed, clientOrderId, loadConfig, quoteFromMarket, resetState, runCycle, type RunnerDeps } from '../runner.js';
 import { threshold } from '../examples/threshold.js';
 import type { TradeLogRecord } from '../../audit/trade-log.js';
 import type { V2OrderBody } from '../../tools/kalshi/orders-v2.js';
@@ -136,6 +136,43 @@ describe('runCycle', () => {
     const r = await runCycle(loadConfig(dir, 'bot'), { mode: 'live' }, f.deps);
     expect(r.error).toContain('503');
     expect(f.logs.at(-1)).toMatchObject({ action: 'decision', outcome: 'error' });
+  });
+});
+
+describe('runCycle in paper mode', () => {
+  it('reads only quotes, fills against the paper book, and never sends', async () => {
+    writeConfig({ paperCashCents: 1_000 });
+    const f = fake();
+    const r = await runCycle(loadConfig(dir, 'bot'), { mode: 'paper' }, f.deps);
+
+    expect(f.calls).toEqual(['GET /markets']);
+    expect(f.placed).toEqual([]);
+    expect(r.results.map((x) => x.status)).toEqual(['paper-filled', 'paper-filled']);
+    expect(r.paper).toMatchObject({ fills: 2, cashCents: 1_000 - (40 + 2) - (39 + 2) });
+    expect(f.logs.filter((l) => l.action === 'paper_fill')).toHaveLength(2);
+    expect(f.logs.at(-1)).toMatchObject({ action: 'decision', mode: 'paper', detail: { paper: { fills: 2 } } });
+  });
+
+  it('carries the paper book across cycles and holds at max position', async () => {
+    writeConfig({ maxContracts: 1 });
+    const f = fake();
+    const cfg = loadConfig(dir, 'bot');
+    await runCycle(cfg, { mode: 'paper' }, f.deps);
+    const second = await runCycle(cfg, { mode: 'paper' }, f.deps);
+
+    expect(second.decisions.every((d) => d.kind === 'hold')).toBe(true);
+    expect(second.paper?.openPositions).toMatchObject({ 'KX-A': { count: 1 }, 'KX-B': { count: 1 } });
+  });
+
+  it('starts over after resetState', async () => {
+    writeConfig();
+    const f = fake();
+    const cfg = loadConfig(dir, 'bot');
+    await runCycle(cfg, { mode: 'paper' }, f.deps);
+    expect(resetState(dir, 'bot')).toBe(true);
+    const r = await runCycle(cfg, { mode: 'paper' }, f.deps);
+    expect(r.cycle).toBe(1);
+    expect(r.paper?.fills).toBe(2);
   });
 });
 

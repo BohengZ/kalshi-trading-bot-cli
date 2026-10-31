@@ -43,7 +43,7 @@ bun start
 
 - **Config, cache, SQLite DB:** `~/.kalshi-bot/`
 - **API keys (`.env`):** `~/.kalshi-bot/.env` — written by the setup wizard. A `.env` in the current directory takes precedence (handy for dev).
-- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`), strategy-cycle `decision` and `fill`, with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
+- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`), strategy-cycle `decision`, `fill` and `paper_fill`, with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
 - **First run** with no keys configured triggers the setup wizard automatically.
 
 ### Updating
@@ -166,7 +166,7 @@ Markets in KXBTCD-26SEP1817 — 3 shown
 | `reflect` | Reflection loop — turns each settled position into a terse lesson, re-surfaced inside `analyze` for the same series |
 | `hypothesis` | Falsifiable-claim registry — executed trades auto-file claims, settlements auto-resolve them; add thematic claims manually |
 | `variants [backtest flags]` | Strategy-variant leaderboard — one signal pipeline segmented through named filters (side, edge band, price band, confidence), ranked by ROI/maxDD |
-| `strategy list` / `strategy init <name>` / `strategy run <name>` | Deterministic strategy engine — no AI in the trading loop. Dry-run by default; `--live` sends orders. See [Strategies](#strategies) |
+| `strategy list` / `strategy init <name>` / `strategy run <name>` / `strategy reset <name>` | Deterministic strategy engine — no AI in the trading loop. Paper-trades on live quotes by default; `--live` sends orders. See [Strategies](#strategies) |
 | `daemon [once]` | Background maintenance loop: index refresh, Octagon prefetch, settlements sync, paper settlement, reflection — keeps caches warm off the critical path |
 | `paper buy/sell ...` / `paper` | Paper-trading ledger — forward-test with real entry quotes and real settlements, zero exchange risk; scored like the backtest |
 | `mandate` / `kill [reason]` / `resume` | Hard trading caps (per-order size/notional, daily realized loss) enforced at order placement, plus an instant halt |
@@ -205,7 +205,7 @@ kalshi hypothesis resolve 3 refuted "only one cut happened"
 | `--json` | JSON output for scripts and agents |
 | `--refresh` | Force fresh Octagon report (analyze, report) |
 | `--performance` | Include win rate, Sharpe, Brier scores (portfolio) |
-| `--dry-run` | Scan without persisting edges (watch) |
+| `--dry-run` | Scan without persisting edges (watch); decide only, no fills (strategy run) |
 | `--verbose` | Verbose output |
 | `--market <market>` | Single-market detail card instead of the event view (trust) |
 | `--min-edge <n>` | Minimum edge threshold in pp (backtest default 0.5) |
@@ -423,14 +423,18 @@ Deterministic strategies trade from fixed rules — no LLM in the loop. A strate
 
 ```bash
 kalshi strategy init my-bot                  # writes ~/.kalshi-bot/strategies/my-bot.json
-kalshi strategy run my-bot --once            # one dry-run cycle: decisions logged, nothing sent
-kalshi strategy run my-bot --interval 1      # dry-run loop, every minute (Ctrl-C to stop)
+kalshi strategy run my-bot --once            # one paper cycle: live quotes, simulated fills, no orders
+kalshi strategy run my-bot --interval 1      # paper loop, every minute, with equity + return (Ctrl-C to stop)
+kalshi strategy reset my-bot                 # start the paper book over
+kalshi strategy run my-bot --dry-run         # decide only — no fills, simulated or real
 kalshi strategy run my-bot --live            # send orders (demo); production also needs --allow-prod
 ```
 
+**Paper mode** (the default) reads only market quotes — one call per 50 markets — and fills against a simulated book that starts at `paperCashCents`: buys fill at the ask and sells at the bid when the limit crosses, the full size fills at the top of book (optimistic on size), Kalshi's taker fee `ceil(0.07·C·P·(1−P))` is charged, and settled markets pay 100¢ or 0¢. Each cycle prints cash, equity (open positions marked at the bid), realized P&L, fees and return. Nothing touches your account, so it works with an empty balance.
+
 The bundled `threshold` strategy is a template: buy one side at or below `entryMaxCents`, sell at `takeProfitCents` or `stopLossCents`, skip wide spreads and markets near close. Add your own in `src/strategy/` and register it in `src/strategy/registry.ts`.
 
-Each cycle makes about five reads (quotes, positions, resting orders, balance, new fills) plus one write per order, all through the client rate limiter (`api.rate_tier`). Orders go through the mandate and kill switch, at most `maxOrdersPerCycle` per cycle. The daily trade log gets a `decision` line per cycle (quotes, positions, every decision with its reason, what was sent), the `place`/`cancel` lines for each order, and a `fill` line for each new fill.
+In `--live` mode each cycle makes about five reads (quotes, positions, resting orders, balance, new fills) plus one write per order, all through the client rate limiter (`api.rate_tier`). Orders go through the mandate and kill switch, at most `maxOrdersPerCycle` per cycle. The daily trade log gets a `decision` line per cycle (quotes, positions, every decision with its reason, what was sent), the `place`/`cancel` lines for each order, a `fill` line for each new fill, and in paper mode a `paper_fill` line per simulated fill or settlement plus the book's equity and return on the `decision` line.
 
 ## Scripting & Parallel Use
 

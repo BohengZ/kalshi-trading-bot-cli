@@ -20,6 +20,8 @@ export interface MarketQuote {
   last: number;
   volume24h: number;
   closeTime: string;
+  /** Settlement result once the market has settled ("yes" / "no"), else empty. */
+  result?: string;
 }
 
 export interface RestingOrder {

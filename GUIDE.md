@@ -43,7 +43,7 @@ bun start        # or `bun run dev` for hot-reload
 
 - **Config, cache, SQLite DB:** `~/.kalshi-bot/`
 - **API keys (`.env`):** `~/.kalshi-bot/.env`. A `.env` in the current directory takes precedence (dev override).
-- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`), strategy-cycle `decision` and `fill`, with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
+- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`), strategy-cycle `decision`, `fill` and `paper_fill`, with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
 
 ### Environment Variables
 
