@@ -1,13 +1,20 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { rmSync } from 'fs';
 import { enforceMandate, orderNotional, MandateViolation } from '../mandate';
+import * as botConfig from '../../utils/bot-config';
 import type { V2OrderBody } from '../../tools/kalshi/orders-v2';
 
-// bot-config reads/writes config.json under the app dir; isolate via env if
-// supported — otherwise these tests only exercise cap math + defaults, which
-// don't touch the kill switch file state.
+// bot-config reads the real ~/.kalshi-bot/config.json; stub it so these tests
+// exercise defaults even when the machine's kill switch or caps are set.
+let settingSpy: ReturnType<typeof spyOn>;
+beforeEach(() => {
+  settingSpy = spyOn(botConfig, 'getBotSetting').mockImplementation(() => undefined);
+});
+afterEach(() => {
+  settingSpy.mockRestore();
+});
 
 function order(over: Partial<V2OrderBody> = {}): V2OrderBody {
   return {

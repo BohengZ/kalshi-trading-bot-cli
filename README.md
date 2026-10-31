@@ -43,6 +43,7 @@ bun start
 
 - **Config, cache, SQLite DB:** `~/.kalshi-bot/`
 - **API keys (`.env`):** `~/.kalshi-bot/.env` — written by the setup wizard. A `.env` in the current directory takes precedence (handy for dev).
+- **Trade log:** `~/.kalshi-bot/trades/YYYY-MM-DD.jsonl` — one file per local day, one JSON line per order action (`place`, `batch_place`, `amend`, `cancel`, `batch_cancel`) with `outcome` `ok`, `refused` (mandate/kill switch) or `error`, the `env` (`demo`/`prod`), the V2 order bodies (`bid` = buy YES, `ask` = sell YES, YES-side dollar price) and the exchange response. Every order path writes it.
 - **First run** with no keys configured triggers the setup wizard automatically.
 
 ### Updating
